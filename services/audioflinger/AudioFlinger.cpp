@@ -153,11 +153,13 @@ static int load_audio_interface(const char *if_name, audio_hw_device_t **dev)
     if (rc) {
         goto out;
     }
+#if !defined(ICS_AUDIO_BLOB) && !defined(MR0_AUDIO_BLOB)
     if ((*dev)->common.version < AUDIO_DEVICE_API_VERSION_MIN) {
         ALOGE("%s wrong audio hw device version %04x", __func__, (*dev)->common.version);
         rc = BAD_VALUE;
         goto out;
     }
+#endif
     return 0;
 
 out:
@@ -989,7 +991,7 @@ status_t AudioFlinger::setMasterMute(bool muted)
 
     Mutex::Autolock _l(mLock);
     mMasterMute = muted;
-
+#ifndef ICS_AUDIO_BLOB
     // Set master mute in the HALs which support it.
     for (size_t i = 0; i < mAudioHwDevs.size(); i++) {
         AutoMutex lock(mHardwareLock);
@@ -1001,14 +1003,15 @@ status_t AudioFlinger::setMasterMute(bool muted)
         }
         mHardwareStatus = AUDIO_HW_IDLE;
     }
-
+#endif
     // Now set the master mute in each playback thread.  Playback threads
     // assigned to HALs which do not have master mute support will apply master
     // mute during the mix operation.  Threads with HALs which do support master
     // mute will simply ignore the setting.
+#ifndef ICS_AUDIO_BLOB
     for (size_t i = 0; i < mPlaybackThreads.size(); i++)
         mPlaybackThreads.valueAt(i)->setMasterMute(muted);
-
+#endif
     return NO_ERROR;
 }
 
@@ -1344,7 +1347,11 @@ size_t AudioFlinger::getInputBufferSize(uint32_t sampleRate, audio_format_t form
     config.format = format;
 
     audio_hw_device_t *dev = mPrimaryHardwareDev->hwDevice();
+#ifndef ICS_AUDIO_BLOB
     size_t size = dev->get_input_buffer_size(dev, &config);
+#else
+    size_t size = dev->get_input_buffer_size(dev, sampleRate, format, popcount(channelMask));
+#endif
     mHardwareStatus = AUDIO_HW_IDLE;
     return size;
 }
@@ -1790,7 +1797,7 @@ audio_module_handle_t AudioFlinger::loadHwModule_l(const char *name)
     AudioHwDevice::Flags flags = static_cast<AudioHwDevice::Flags>(0);
     {  // scope for auto-lock pattern
         AutoMutex lock(mHardwareLock);
-
+#if !defined(ICS_AUDIO_BLOB) && !defined(MR0_AUDIO_BLOB)
         if (0 == mAudioHwDevs.size()) {
             mHardwareStatus = AUDIO_HW_GET_MASTER_VOLUME;
             if (NULL != dev->get_master_volume) {
@@ -1808,21 +1815,21 @@ audio_module_handle_t AudioFlinger::loadHwModule_l(const char *name)
                 }
             }
         }
-
+#endif
         mHardwareStatus = AUDIO_HW_SET_MASTER_VOLUME;
         if ((NULL != dev->set_master_volume) &&
             (OK == dev->set_master_volume(dev, mMasterVolume))) {
             flags = static_cast<AudioHwDevice::Flags>(flags |
                     AudioHwDevice::AHWD_CAN_SET_MASTER_VOLUME);
         }
-
+#if !defined(ICS_AUDIO_BLOB) && !defined(MR0_AUDIO_BLOB)
         mHardwareStatus = AUDIO_HW_SET_MASTER_MUTE;
         if ((NULL != dev->set_master_mute) &&
             (OK == dev->set_master_mute(dev, mMasterMute))) {
             flags = static_cast<AudioHwDevice::Flags>(flags |
                     AudioHwDevice::AHWD_CAN_SET_MASTER_MUTE);
         }
-
+#endif
         mHardwareStatus = AUDIO_HW_IDLE;
     }
 
@@ -1933,13 +1940,27 @@ sp<AudioFlinger::PlaybackThread> AudioFlinger::openOutput_l(audio_module_handle_
         }
     }
 
-    status_t status = hwDevHal->open_output_stream(hwDevHal,
+
+    status_t status;
+
+#ifndef ICS_AUDIO_BLOB
+    status = hwDevHal->open_output_stream(hwDevHal,
                                                    *output,
                                                    devices,
                                                    flags,
                                                    config,
                                                    &outStream,
                                                    address.string());
+#else
+    status = hwDevHal->open_output_stream(hwDevHal,
+                                          devices,
+                                          (int *)&config->format,
+                                          &config->channel_mask,
+                                          &config->sample_rate,
+                                          &outStream);
+    uint32_t newflags = flags | AUDIO_OUTPUT_FLAG_PRIMARY;
+    flags = (audio_output_flags_t)newflags;
+#endif
 
 #ifdef QCOM_DIRECTTRACK
     /* if (flags & AUDIO_OUTPUT_FLAG_LPA || flags & AUDIO_OUTPUT_FLAG_TUNNEL ) {
@@ -2244,8 +2265,19 @@ sp<AudioFlinger::RecordThread> AudioFlinger::openInput_l(audio_module_handle_t m
     audio_config_t halconfig = *config;
     audio_hw_device_t *inHwHal = inHwDev->hwDevice();
     audio_stream_in_t *inStream = NULL;
-    status_t status = inHwHal->open_input_stream(inHwHal, *input, device, &halconfig,
+    status_t status;
+
+#ifndef ICS_AUDIO_BLOB
+    status = inHwHal->open_input_stream(inHwHal, *input, device, &halconfig,
                                         &inStream, flags, address.string(), source);
+#else
+        status = inHwHal->open_input_stream(inHwHal, device,
+                                        (int *)&config->format,
+                                        &config->channel_mask,
+                                        &config->sample_rate, (audio_in_acoustics_t)0,
+                                        &inStream);
+#endif
+
     ALOGV("openInput_l() openInputStream returned input %p, SamplingRate %d"
            ", Format %#x, Channels %x, flags %#x, status %d",
             inStream,
@@ -2266,8 +2298,16 @@ sp<AudioFlinger::RecordThread> AudioFlinger::openInput_l(audio_module_handle_t m
         // FIXME describe the change proposed by HAL (save old values so we can log them here)
         ALOGV("openInput_l() reopening with proposed sampling rate and channel mask");
         inStream = NULL;
+#ifndef ICS_AUDIO_BLOB
         status = inHwHal->open_input_stream(inHwHal, *input, device, &halconfig,
                                             &inStream, flags, address.string(), source);
+#else
+        status = inHwHal->open_input_stream(inHwHal, device,
+                                        (int *)&config->format,
+                                        &config->channel_mask,
+                                        &config->sample_rate, (audio_in_acoustics_t)0,
+                                        &inStream);
+#endif
         // FIXME log this new status; HAL should not propose any further changes
     }
 

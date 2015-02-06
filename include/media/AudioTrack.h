@@ -270,28 +270,28 @@ public:
      * an uninitialized AudioTrack produces undefined results.
      * See set() method above for possible return codes.
      */
-            status_t    initCheck() const   { return mStatus; }
+            status_t initCheck() const;
 
     /* Returns this track's estimated latency in milliseconds.
      * This includes the latency due to AudioTrack buffer size, AudioMixer (if any)
      * and audio hardware driver.
      */
-            uint32_t    latency() const     { return mLatency; }
+            uint32_t latency() const;
 
     /* getters, see constructors and set() */
 
-            audio_stream_type_t streamType() const { return mStreamType; }
-            audio_format_t format() const   { return mFormat; }
+            audio_stream_type_t streamType() const;
+            audio_format_t format() const;
 
     /* Return frame size in bytes, which for linear PCM is
      * channelCount * (bit depth per channel / 8).
      * channelCount is determined from channelMask, and bit depth comes from format.
      * For non-linear formats, the frame size is typically 1 byte.
      */
-            size_t      frameSize() const   { return mFrameSize; }
+            size_t frameSize() const;
 
-            uint32_t    channelCount() const { return mChannelCount; }
-            size_t      frameCount() const  { return mFrameCount; }
+            uint32_t channelCount() const;
+            size_t frameCount() const;
 
     /* Return the static buffer specified in constructor or set(), or 0 for streaming mode */
             sp<IMemory> sharedBuffer() const { return mSharedBuffer; }

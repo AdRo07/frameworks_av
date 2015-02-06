@@ -56,6 +56,16 @@ static int64_t getNowUs()
 }
 
 // static
+
+uint32_t AudioTrack::latency() const { return mLatency; }
+audio_stream_type_t AudioTrack::streamType() const { return mStreamType; }
+audio_format_t AudioTrack::format() const { return mFormat; }
+uint32_t AudioTrack::channelCount() const { return mChannelCount; }
+size_t AudioTrack::frameCount() const { return mFrameCount; }
+size_t AudioTrack::frameSize() const { return mFrameSize; }
+status_t AudioTrack::initCheck() const { return mStatus; }
+
+
 status_t AudioTrack::getMinFrameCount(
         size_t* frameCount,
         audio_stream_type_t streamType,

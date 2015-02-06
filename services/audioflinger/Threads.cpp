@@ -3133,13 +3133,13 @@ void AudioFlinger::MixerThread::threadLoop_mix()
     // obtain the presentation timestamp of the next output buffer
     int64_t pts;
     status_t status = INVALID_OPERATION;
-
+#ifndef ICS_AUDIO_BLOB
     if (mNormalSink != 0) {
         status = mNormalSink->getNextWriteTimestamp(&pts);
     } else {
         status = mOutputSink->getNextWriteTimestamp(&pts);
     }
-
+#endif
     if (status != NO_ERROR) {
         pts = AudioBufferProvider::kInvalidPTS;
     }
@@ -4292,8 +4292,10 @@ void AudioFlinger::DirectOutputThread::cacheParameters_l()
 
 void AudioFlinger::DirectOutputThread::flushHw_l()
 {
+#ifndef ICS_AUDIO_BLOB
     if (mOutput->stream->flush != NULL)
         mOutput->stream->flush(mOutput->stream);
+#endif
 }
 
 // ----------------------------------------------------------------------------
